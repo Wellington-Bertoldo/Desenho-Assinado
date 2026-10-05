@@ -1,65 +1,45 @@
-const LARGURA = 800;
-const ALTURA = 880;
-const CENTRO_X = 400;
-const CENTRO_Y = 400;
-const RAIO = 360;
-const PONTOS = 240;
+import { gerarDesenho } from "../../lib/desenho.js";
 
-// Escapa caracteres com significado especial em XML.
-// Todo texto vindo do usuario precisa passar por aqui antes de entrar no SVG.
-export function escaparXml(texto) {
-  return String(texto)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
-// Retorna true se o valor for um inteiro entre 1 e 100.
-export function numeroValido(valor) {
-  return Number.isInteger(valor) && valor >= 1 && valor <= 100;
-}
-
-function ponto(i) {
-  // Comeca no topo do circulo e anda no sentido horario.
-  const angulo = (2 * Math.PI * i) / PONTOS - Math.PI / 2;
-  return {
-    x: (CENTRO_X + RAIO * Math.cos(angulo)).toFixed(2),
-    y: (CENTRO_Y + RAIO * Math.sin(angulo)).toFixed(2),
-  };
-}
-
-export function gerarDesenho(numero, email) {
-  if (!numeroValido(numero)) {
-    throw new RangeError("O numero deve ser um inteiro entre 1 e 100.");
+export async function onRequest({ request, env }) {
+  if (request.method !== "POST") {
+    return new Response("Método não permitido", { status: 405, headers: { Allow: "POST" } });
   }
 
-  const k = numero + 1;
-  const linhas = [];
+  let corpo;
+  try {
+    corpo = await request.json();
+  } catch {
+    return new Response("JSON inválido", { status: 400 });
+  }
+  const numero = corpo && corpo.numero;
+  if (!Number.isInteger(numero) || numero < 1 || numero > 100) {
+    return new Response("numero deve ser inteiro entre 1 e 100", { status: 400 });
+  }
 
-  for (let i = 0; i < PONTOS; i++) {
-    const j = (k * i) % PONTOS;
-    if (i === j) continue; // ponto fixo: nao ha segmento a desenhar
-    const a = ponto(i);
-    const b = ponto(j);
-    const matiz = Math.round((360 * i) / PONTOS);
-    linhas.push(
-      `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="hsl(${matiz} 85% 62%)"/>`
+  const m = (request.headers.get("Authorization") || "").match(/^Bearer (.+)$/);
+  if (!m) return new Response("Token ausente", { status: 401 });
+
+  let info;
+  try {
+    const r = await fetch(
+      "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(m[1])
     );
+    if (r.status !== 200) return new Response("Token inválido", { status: 401 });
+    info = await r.json();
+  } catch {
+    return new Response("Token inválido", { status: 401 });
   }
 
-  const assinatura = escaparXml(email);
+  if (
+    info.aud !== env.GOOGLE_CLIENT_ID ||
+    String(info.email_verified) !== "true" ||
+    !info.email
+  ) {
+    return new Response("Token não aceito", { status: 401 });
+  }
 
-  return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LARGURA} ${ALTURA}" width="${LARGURA}" height="${ALTURA}" data-numero="${numero}">`,
-    `<rect width="${LARGURA}" height="${ALTURA}" fill="#0d1117"/>`,
-    `<circle cx="${CENTRO_X}" cy="${CENTRO_Y}" r="${RAIO}" fill="none" stroke="#30363d" stroke-width="1"/>`,
-    `<g stroke-width="0.8" stroke-opacity="0.75" stroke-linecap="round">`,
-    ...linhas,
-    `</g>`,
-    `<text x="${CENTRO_X}" y="820" fill="#e6edf3" font-family="Georgia, serif" font-size="26" text-anchor="middle">n = ${numero}</text>`,
-    `<text x="${CENTRO_X}" y="855" fill="#8b949e" font-family="Georgia, serif" font-size="18" font-style="italic" text-anchor="middle">assinado por ${assinatura}</text>`,
-    `</svg>`,
-  ].join("\n");
+  return new Response(gerarDesenho(numero, info.email), {
+    status: 200,
+    headers: { "Content-Type": "image/svg+xml" }
+  });
 }
