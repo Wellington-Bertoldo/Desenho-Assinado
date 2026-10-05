@@ -112,7 +112,6 @@ figure svg {
   border: 1px solid var(--borda);
 }
 
-@media (max-width: 560px){}
 form {
   display: flex;
   flex-direction: column;
@@ -124,6 +123,4 @@ form {
   border-radius: 10px;
 }
 
-form input {
-  max-width: 200px;
-}
+form input { max-width: 200px; }

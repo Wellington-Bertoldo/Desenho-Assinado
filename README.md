@@ -23,5 +23,7 @@ Framework preset: `None`. Build command: vazio. Build output directory: `public`
 ## Identificação (preencha após o fork)
 
 Nome:Wellington miguel bertoldo
+
 RA:2026108929
+
 URL: https://
